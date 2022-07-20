@@ -39,12 +39,18 @@ int main(int argc, char** argv) {
         numPointerChases = atoi(argv[2]);
 
     vector<vector<size_t>> arrays(numPointerChases, vector<size_t>(testSize));
+    vector<vector<size_t>> singlePointerChaseComparison(1, vector<size_t>(numPointerChases*testSize));
     for(auto& array: arrays) {
         for(size_t i{0}; i < array.size(); i++) {
             array[i] = i;
         }
         shuffle(array.begin(), array.end(), generator);
     }
+    
+    for(size_t i{0}; i < singlePointerChaseComparison[0].size(); i++){ 
+        singlePointerChaseComparison[0][i] = i;
+    }
+    shuffle(singlePointerChaseComparison[0].begin(), singlePointerChaseComparison[0].end(), generator);
 
     BenchHelper bench;
 
@@ -59,5 +65,9 @@ int main(int argc, char** argv) {
     bench.timeFunction([&] () -> void {
         readRandom(arrays, false);
     }, "random read time without prefetch");
+
+    bench.timeFunction([&] () -> void {
+        readRandom(singlePointerChaseComparison, false);
+    }, "random read time using a single pointer chase");
 
 }
