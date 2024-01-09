@@ -6,6 +6,7 @@
 #include <random>
 #include <chrono>
 #include <cstring>
+#include <immintrin.h>
 
 using namespace std;
 
@@ -105,8 +106,14 @@ int main(int argc, char** argv) {
     cout << "Linear partial write bandwidth per second: " << linearPartialWriteBandwidthGBs << " GB/s" << endl;
 
     double linearFullWriteTime = timeFunctionS([mem, N] () {
+            // CacheLine x(0);
+            __m512i x{0, 0, 0, 0, 0, 0, 0, 0};
+            __m512i off{1, 0, 0, 0, 0, 0, 0, 0};
             for(size_t i = 0; i < N; i++){
-                mem[i] = CacheLine(i);
+                // x.data++;
+                x = _mm512_add_epi64(x, off);
+                // mem[i] = 
+                _mm512_stream_si512((__m512i*)&mem[i], x);
             }
         });
     double linearFullWriteBandwidthGBs = memSize / (1000'000'000.0 * linearFullWriteTime);
