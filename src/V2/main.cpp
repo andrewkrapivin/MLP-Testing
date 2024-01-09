@@ -44,6 +44,33 @@ void* allocPages(size_t n, bool useHugePages) {
     return p;
 }
 
+//We don't want to use up memory bandwidth finding the addresses for where to write random stuff. Therefore, we have a small array in L1 or L2 that is read and reread. Not sure this works
+class SmallRandomizer {
+    static constexpr size_t NumOffsets = 1ull << 12;
+    size_t OffsetRange;
+    size_t offsets[NumOffsets];
+
+    public:
+        SmallRandomizer(size_t N) {
+            assert(N % NumOffsets == 0);
+            OffsetRange = N / NumOffsets;
+            unsigned seed = chrono::steady_clock::now().time_since_epoch().count();
+            mt19937 generator (seed);
+            uniform_int_distribution<size_t> dist(0, OffsetRange-1);
+            for(size_t i =0; i < NumOffsets; i++) {
+                offsets[i] = dist(generator);
+            }
+        }
+
+        size_t getRandomized(size_t i) {
+            size_t offsetIndex = i & (NumOffsets - 1);
+            size_t start = offsetIndex * OffsetRange;
+            size_t naturalOffset = i / NumOffsets;
+            size_t realOffset = (offsets[offsetIndex] + naturalOffset) % OffsetRange;
+            return start + realOffset;
+        }
+};
+
 int main(int argc, char** argv) {
     size_t logMemSize = 31;
     size_t maxPointerChases = 32;
@@ -61,7 +88,9 @@ int main(int argc, char** argv) {
 
     size_t memSize = numPages * curPageSize;
     size_t N = memSize / CacheLineSize;
-    CacheLine* mem = static_cast<CacheLine*>(allocPages(memSize, useHugePages));
+    CacheLine* mem = static_cast<CacheLine*>(allocPages(memSize, useHugePages));\
+
+    SmallRandomizer rando(N);
 
     // generate(mem, mem+N, [] () {static size_t count = 0; return CacheLine(count++);});
     unsigned seed = chrono::steady_clock::now().time_since_epoch().count();
@@ -83,19 +112,27 @@ int main(int argc, char** argv) {
     double linearFullWriteBandwidthGBs = memSize / (1000'000'000.0 * linearFullWriteTime);
     cout << "Linear full write bandwidth per second: " << linearFullWriteBandwidthGBs << " GB/s" << endl;
 
-    double linearBlockWriteTime = timeFunctionS([mem, N] () {
-            constexpr size_t B = 16;
-            CacheLine buff[B];
-            for (size_t i = 0; i < N; i+=B)
-            {
-                for(size_t j = 0; j < B; j++){
-                    buff[j].data = i+j;
-                }
-                memcpy(&mem[i], buff, CacheLineSize*B);
+    double randomFullWriteTime = timeFunctionS([mem, N, &rando] () {
+            for(size_t i = 0; i < N; i++){
+                mem[rando.getRandomized(i)] = CacheLine(i);
             }
         });
-    double linearBlockWriteBandwidthGBs = memSize / (1000'000'000.0 * linearBlockWriteTime);
-    cout << "Linear blocked write bandwidth per second: " << linearBlockWriteBandwidthGBs << " GB/s" << endl;
+    double randomFullWriteBandwidthGBs = memSize / (1000'000'000.0 * randomFullWriteTime);
+    cout << "Linear full cacheline random write bandwidth per second: " << randomFullWriteBandwidthGBs << " GB/s" << endl;
+
+    // double linearBlockWriteTime = timeFunctionS([mem, N] () {
+    //         constexpr size_t B = 16;
+    //         CacheLine buff[B];
+    //         for (size_t i = 0; i < N; i+=B)
+    //         {
+    //             for(size_t j = 0; j < B; j++){
+    //                 buff[j].data = i+j;
+    //             }
+    //             memcpy(&mem[i], buff, CacheLineSize*B);
+    //         }
+    //     });
+    // double linearBlockWriteBandwidthGBs = memSize / (1000'000'000.0 * linearBlockWriteTime);
+    // cout << "Linear blocked write bandwidth per second: " << linearBlockWriteBandwidthGBs << " GB/s" << endl;
 
     shuffle(mem, mem+N, generator);
     
@@ -107,4 +144,13 @@ int main(int argc, char** argv) {
         });
     double linearReadBandwidthGBs = memSize / (1000'000'000.0 * linearReadTime);
     cout << "Linear read bandwidth per second: " << linearReadBandwidthGBs << " GB/s" << endl;
+
+    double randomReadTime = timeFunctionS([mem, N, &rando] () {size_t sum = 0; 
+            for(size_t i = 0; i < N; i++){
+                sum+=mem[rando.getRandomized(i)].data;
+            }
+            cout << sum << endl;
+        });
+    double randomReadBandwidthGBs = memSize / (1000'000'000.0 * randomReadTime);
+    cout << "Random read bandwidth per second: " << randomReadBandwidthGBs << " GB/s" << endl;
 }
