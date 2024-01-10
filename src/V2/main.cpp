@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
     double linearFullWriteBandwidthGBs = memSize / (1000'000'000.0 * linearFullWriteTime);
     cout << "Linear full write bandwidth per second: " << linearFullWriteBandwidthGBs << " GB/s" << endl;
 
-    double randomFullWriteTime = timeFunctionS([mem, N, &rando] () {
+    double randomFullWriteTimeStream = timeFunctionS([mem, N, &rando] () {
             __m512i x{0, 0, 0, 0, 0, 0, 0, 0};
             __m512i off{1, 0, 0, 0, 0, 0, 0, 0};
             for(size_t i = 0; i < N; i++){
@@ -128,8 +128,20 @@ int main(int argc, char** argv) {
                 _mm512_stream_si512((__m512i*)&mem[rando.getRandomized(i)], x);
             }
         });
-    double randomFullWriteBandwidthGBs = memSize / (1000'000'000.0 * randomFullWriteTime);
-    cout << "Linear full cacheline random write bandwidth per second: " << randomFullWriteBandwidthGBs << " GB/s" << endl;
+    double randomFullWriteStreamBandwidthGBs = memSize / (1000'000'000.0 * randomFullWriteTimeStream);
+    cout << "Linear full cacheline random write bandwidth per second (stream): " << randomFullWriteStreamBandwidthGBs << " GB/s" << endl;
+
+    double randomFullWriteTimeStore = timeFunctionS([mem, N, &rando] () {
+            __m512i x{0, 0, 0, 0, 0, 0, 0, 0};
+            __m512i off{1, 0, 0, 0, 0, 0, 0, 0};
+            for(size_t i = 0; i < N; i++){
+                x = _mm512_add_epi64(x, off);
+                // mem[rando.getRandomized(i)] = CacheLine(i);
+                _mm512_store_si512((__m512i*)&mem[rando.getRandomized(i)], x);
+            }
+        });
+    double randomFullWriteStoreBandwidthGBs = memSize / (1000'000'000.0 * randomFullWriteTimeStore);
+    cout << "Linear full cacheline random write bandwidth per second (store): " << randomFullWriteStoreBandwidthGBs << " GB/s" << endl;
 
     // double linearBlockWriteTime = timeFunctionS([mem, N] () {
     //         constexpr size_t B = 16;
