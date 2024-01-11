@@ -159,20 +159,40 @@ int main(int argc, char** argv) {
 
     shuffle(mem, mem+N, generator);
     
-    double linearReadTime = timeFunctionS([mem, N] () {size_t sum = 0; 
+    // double linearReadTime = timeFunctionS([mem, N] () {size_t sum = 0; 
+    //         for(size_t i = 0; i < N; i++){
+    //             sum+=mem[i].data;
+    //         }
+    //         cout << sum << endl;
+    //     });
+    // double linearReadBandwidthGBs = memSize / (1000'000'000.0 * linearReadTime);
+    // cout << "Linear read bandwidth per second: " << linearReadBandwidthGBs << " GB/s" << endl;
+
+    // double randomReadTime = timeFunctionS([mem, N, &rando] () {size_t sum = 0; 
+    //         for(size_t i = 0; i < N; i++){
+    //             sum+=mem[rando.getRandomized(i)].data;
+    //         }
+    //         cout << sum << endl;
+    //     });
+    // double randomReadBandwidthGBs = memSize / (1000'000'000.0 * randomReadTime);
+    // cout << "Random read bandwidth per second: " << randomReadBandwidthGBs << " GB/s" << endl;
+
+    double linearReadTime = timeFunctionS([mem, N] () {
+        __m512i sum{0, 0, 0, 0, 0, 0, 0, 0};
             for(size_t i = 0; i < N; i++){
-                sum+=mem[i].data;
+                sum = _mm512_add_epi64(sum, _mm512_load_si512(&mem[i]));
             }
-            cout << sum << endl;
+            cout << sum[0] << endl;
         });
     double linearReadBandwidthGBs = memSize / (1000'000'000.0 * linearReadTime);
     cout << "Linear read bandwidth per second: " << linearReadBandwidthGBs << " GB/s" << endl;
 
-    double randomReadTime = timeFunctionS([mem, N, &rando] () {size_t sum = 0; 
+    double randomReadTime = timeFunctionS([mem, N, &rando] () {
+            __m512i sum{0, 0, 0, 0, 0, 0, 0, 0};
             for(size_t i = 0; i < N; i++){
-                sum+=mem[rando.getRandomized(i)].data;
+                sum = _mm512_add_epi64(sum, _mm512_load_si512(&mem[rando.getRandomized(i)]));
             }
-            cout << sum << endl;
+            cout << sum[0] << endl;
         });
     double randomReadBandwidthGBs = memSize / (1000'000'000.0 * randomReadTime);
     cout << "Random read bandwidth per second: " << randomReadBandwidthGBs << " GB/s" << endl;
